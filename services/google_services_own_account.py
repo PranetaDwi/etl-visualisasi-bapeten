@@ -10,60 +10,67 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-
-CREDENTIALS_FILE = json.loads(
-        st.secrets["CLIENT_SECRET_JSON"]
-    )
-TOKEN_FILE = json.loads(
-        st.secrets["TOKEN_JSON"]
-    )
-
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
 
-
 def connect_google():
-    credentials = None
+    # Baca JSON langsung dari Streamlit Secrets
+    client_data = json.loads(
+        st.secrets["CLIENT_SECRET_JSON"]
+    )
 
-    # Gunakan token login yang sudah tersimpan
-    if TOKEN_FILE.exists():
-        credentials = Credentials.from_authorized_user_file(
-            str(TOKEN_FILE),
-            SCOPES,
+    token_data = json.loads(
+        st.secrets["TOKEN_JSON"]
+    )
+
+    # Mendukung konfigurasi OAuth installed maupun web
+    client_config = (
+        client_data.get("installed")
+        or client_data.get("web")
+    )
+
+    if not client_config:
+        raise ValueError(
+            "Konfigurasi OAuth tidak ditemukan."
         )
 
-    # Login ulang atau perbarui token jika diperlukan
-    if not credentials or not credentials.valid:
-        if (
-            credentials
-            and credentials.expired
-            and credentials.refresh_token
-        ):
-            credentials.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(CREDENTIALS_FILE),
-                SCOPES,
-            )
+    # Isi informasi client ke data token
+    token_data["client_id"] = client_config["client_id"]
+    token_data["client_secret"] = client_config["client_secret"]
+    token_data["token_uri"] = client_config["token_uri"]
 
-            credentials = flow.run_local_server(port=0)
+    # Buat credential tanpa membaca file lokal
+    credentials = Credentials.from_authorized_user_info(
+        token_data,
+        scopes=SCOPES,
+    )
 
-        TOKEN_FILE.write_text(
-            credentials.to_json(),
-            encoding="utf-8",
+    # Refresh access token jika kedaluwarsa
+    if credentials.expired and credentials.refresh_token:
+        credentials.refresh(Request())
+
+    if not credentials.valid:
+        raise RuntimeError(
+            "Token tidak valid. Periksa refresh token "
+            "dan izin OAuth yang diberikan."
         )
 
-    drive = build("drive", "v3", credentials=credentials)
-    sheets = build("sheets", "v4", credentials=credentials)
+    drive = build(
+        "drive",
+        "v3",
+        credentials=credentials,
+    )
+
+    sheets = build(
+        "sheets",
+        "v4",
+        credentials=credentials,
+    )
 
     return drive, sheets
-
-
 
 def read_excel(file_id, drive):
     request = drive.files().get_media(fileId=file_id)
