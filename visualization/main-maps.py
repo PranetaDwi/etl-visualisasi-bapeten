@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 import streamlit as st
 
-ROOT_DIR = Path(r"D:\BAPETEN\BAPETEN PROJEK\neta-eksplorasi")
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
