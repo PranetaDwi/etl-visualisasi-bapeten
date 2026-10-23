@@ -8,4 +8,4 @@ google-auth-httplib2
 httplib2
 geopandas
 folium
-st_folium
+streamlit_folium
