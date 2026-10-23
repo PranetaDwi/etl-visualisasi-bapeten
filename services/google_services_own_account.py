@@ -1,4 +1,5 @@
-
+import json
+import streamlit as st
 from io import BytesIO
 from pathlib import Path
 
@@ -11,8 +12,13 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-CREDENTIALS_FILE = BASE_DIR / "client-secret.json"
-TOKEN_FILE = BASE_DIR / "token.json"
+
+CREDENTIALS_FILE = json.loads(
+        st.secrets["CLIENT_SECRET_JSON"]
+    )
+TOKEN_FILE = json.loads(
+        st.secrets["TOKEN_JSON"]
+    )
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
