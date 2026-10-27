@@ -42,6 +42,8 @@ from services.google_services_own_account import (
     read_excel,
 )
 
+from etl.update_data_srp import refresh_data_srp
+
 
 # =========================================================
 # 2. KONSTANTA
@@ -404,6 +406,7 @@ with st.container(
         key="btn_refresh",
     ):
         st.cache_data.clear()
+        refresh_data_srp()
         st.rerun()
 
     with st.container(key="clock"):
@@ -521,7 +524,12 @@ with map_column:
     ):
         card_title("Persebaran Provinsi berdasarkan Total SRP")
 
-        # Tempatkan kode peta yang sudah kamu gunakan di sini.
+        
+        st.dataframe(
+            df,
+            hide_index=True,
+            use_container_width=True,
+        )
 
 
 with ikk_column:
