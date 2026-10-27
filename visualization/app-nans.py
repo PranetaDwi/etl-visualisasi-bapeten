@@ -17,7 +17,8 @@ if str(ROOT_DIR) not in sys.path:
 from services.google_services_own_account import (
     connect_google,
     read_parquet_drive,
-    read_sheet
+    read_sheet,
+    read_excel
 )
 
 FILE_PARQUET_ID = "1dqm3AKv8S85Eamp_59W7ooeGsXlPVFxU"
@@ -32,9 +33,66 @@ def load_data_rekapitulasi():
     drive, _ = connect_google()
     return read_sheet(ID_FILE_EXCEL, drive, sheet_name="Sheet1")
 
+ID_FILE_TEMUAN = "1vqxcE_9L_T4VZ3z7g-BC8fp7StIMVSX_"
+
+
+def load_data_temuan():
+    drive, _ = connect_google()
+    df_excel = read_excel(ID_FILE_TEMUAN, drive)
+
+    df = pd.read_excel(
+        df_excel,
+        sheet_name="clean_data",
+        engine="openpyxl"
+    )
+
+    return df
+
+def load_data_temuan_terbuka_tertutup():
+
+    df = load_data_temuan()
+
+    df_status = (
+        df.groupby(["Kelompok Kegiatan", "Kode Temuan", "Status Bundling/ Temuan"])
+        .size()
+        .unstack(fill_value=0)
+        .reset_index()
+        .rename(columns={
+            "Kelompok Kegiatan": "Jenis Kegiatan",
+            "Kode Temuan": "Kode",
+            "Terbuka": "terbuka",
+            "Tertutup": "tertutup"
+        })
+    )
+
+    df_status["Total Temuan"] = df_status["terbuka"] + df_status["tertutup"]
+
+    return df_status
+
+
+def load_data_temuan_per_ikk():
+    df = load_data_temuan()
+    mapping_ikk = {
+        "01": "01 - Kode Perizinan",
+        "02": "02 - Ketersediaan SDM",
+        "03": "03 - Pemantauan Dosis Radiasi",
+        "04": "04 - Pemantauan Kesehatan Pekerja Radiasi",
+        "05": "05 - Ketersediaan Peralatan Keselamatan dan Keamanan SRP",
+        "06": "06 - Pemantauan Paparan Radiasi Daerah Kerja",
+        "07": "07 - Ketersediaan dan Kesesuaian Dokumen dan Rekaman Keselamatan dan Keamanan SRP"
+    }
+
+    df["kode"] = df["Kode Temuan"].astype(str).str[2:4]
+    df["Kode IKK"] = df["kode"].map(mapping_ikk).fillna(df["kode"])
+
+    return df
+
+
 # Muat Data
 df = load_data_srp()
 df_sheet = load_data_rekapitulasi()
+df_temuan = load_data_temuan_terbuka_tertutup()
+df_temuan_ikk = load_data_temuan_per_ikk()
 
 LOGO = APP_DIR / "assets" / "logo_bapeten.png"
 CSS_FILE = APP_DIR / "assets" / "style.css"
@@ -192,6 +250,15 @@ with map_column:
 with ikk_column:
     with st.container(border=True, height=CARD_HEIGHT, key="card_kab"):
         card_title("Persentase per IKK")
+        st.dataframe(
+        df_temuan_ikk,
+        hide_index=True
+    )
+
 
 with st.container(border=True, height=320, key="card_tbl"):
     card_title("Kegiatan dan Jumlah Temuan")
+    st.dataframe(
+        df_temuan,
+        hide_index=True
+    )
