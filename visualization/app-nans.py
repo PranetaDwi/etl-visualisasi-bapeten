@@ -8,24 +8,18 @@ import streamlit as st
 import sys
 
 # 1. konfigurasi
+# 1. Konfigurasi Path & Service
 APP_DIR = Path(__file__).resolve().parent
-DATA_DIRS = [
-    APP_DIR,
-    APP_DIR / "data"
-]
-
-ROOT_DIR = Path(r"D:\BAPETEN\BAPETEN PROJEK\neta-eksplorasi")
+ROOT_DIR = APP_DIR.parent  # root repo, tempat folder services berada
 
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
-
 
 from services.google_services_own_account import (
     connect_google,
     read_parquet_drive,
     read_sheet
 )
-
 
 FILE_PARQUET_ID = "1dqm3AKv8S85Eamp_59W7ooeGsXlPVFxU"
 
