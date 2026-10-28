@@ -44,6 +44,8 @@ from services.google_services_own_account import (
 
 from etl.update_data_srp import refresh_data_srp
 
+from data_services.load_data_temuan import load_data_temuan_function
+
 
 # =========================================================
 # 2. KONSTANTA
@@ -92,15 +94,7 @@ def load_data_rekapitulasi():
 
 @st.cache_data(ttl=3600, show_spinner="Memuat data temuan...")
 def load_data_temuan():
-    drive, _ = connect_google()
-    excel_data = read_excel(ID_FILE_TEMUAN, drive)
-
-    return pd.read_excel(
-        excel_data,
-        sheet_name="clean_data",
-        engine="openpyxl",
-    )
-
+    return load_data_temuan_function()
 
 # =========================================================
 # 4. PENGOLAHAN DATA TEMUAN DENGAN CACHE
