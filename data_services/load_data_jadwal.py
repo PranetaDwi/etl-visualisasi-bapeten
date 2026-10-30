@@ -31,6 +31,8 @@ def load_data_jadwal_function():
         engine="openpyxl",
     )
 
+    df = df[df["Sifat"] != "Verifikasi Perizinan"]
+
     df["Tahun"] = df["Tanggal Pelaksanaan"].astype(str).str[:4]
 
     return df

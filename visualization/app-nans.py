@@ -366,7 +366,7 @@ kpi_items = [
     ("Provinsi", selected_province),
 
     (
-        "Jumlah Inspeksi per 4 Tahun",
+        "Jumlah Inspeksi",
         load_data_jadwal_with_filter(selected_province, selected_year)
     ),
 
@@ -427,13 +427,12 @@ with map_column:
         key="card_map",
     ):
         card_title("Persebaran Provinsi berdasarkan Total SRP")
-        
+
         st.dataframe(
             df_srp_load_filter,
             hide_index=True,
             use_container_width=True,
         )
-
 
 with ikk_column:
     with st.container(
@@ -448,7 +447,6 @@ with ikk_column:
             hide_index=True,
             use_container_width=True,
         )
-
 
 with st.container(
     border=True,
