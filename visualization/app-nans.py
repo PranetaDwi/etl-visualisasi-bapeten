@@ -1,4 +1,3 @@
-
 import base64
 import sys
 from datetime import datetime, timedelta, timezone
@@ -8,6 +7,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
+from components.maps import render_srp_map
+import plotly.express as px
 
 
 # =========================================================
@@ -295,6 +296,11 @@ status_options = sorted(
     df["status_sumber"].dropna().unique().tolist()
 )
 
+# df_temuan_filt = df_temuan.copy()
+# kelompok_options = sorted(
+#     df_temuan_filt["Kelompok Kegiatan"].dropna().unique().tolist()
+# )
+
 
 # =========================================================
 # 8. SIDEBAR DAN FILTER
@@ -322,6 +328,13 @@ with st.sidebar:
     sidebar_label("sliders", "Filter")
 
     with st.container(border=True, key="card_filter"):
+        if "provinsi_dari_peta" in st.session_state:
+            provinsi_dari_peta = st.session_state.pop("provinsi_dari_peta")
+
+            pilihan_valid = ["Semua"] + province_options
+
+            if provinsi_dari_peta in pilihan_valid:
+                st.session_state["filter_provinsi"] = provinsi_dari_peta
         selected_province = st.selectbox(
             "Provinsi",
             ["Semua"] + province_options,
@@ -340,6 +353,11 @@ with st.sidebar:
             status_options,
             key="filter_status",
         )
+        # selected_kelompok = st.multiselect(
+        #     "Kelompok Kegiatan",
+        #     kelompok_options,
+        #     key="filter_kelompok",
+        # )
 
     sidebar_label("file", "Data")
 
@@ -366,6 +384,11 @@ if selected_status:
 
 if selected_province != "Semua":
     mask &= df["propinsi"].eq(selected_province)
+
+# if selected_kelompok:
+#     df_temuan_filt = df_temuan_filt[
+#         df_temuan_filt["Kelompok Kegiatan"].isin(selected_kelompok)
+#     ].copy()
 
 filtered = df.loc[mask]
 
@@ -509,42 +532,92 @@ html(f'<div class="kpi-row">{kpi_html}</div>')
 
 
 # =========================================================
-# 14. KARTU GRAFIK DAN TABEL
+# 14. KARTU GRAFIK DAN TABEL (DICOMMENT KARENA MASIH BELUM BERES!)
 # =========================================================
 
 CARD_HEIGHT = 520
 
 map_column, ikk_column = st.columns(2)
 
-with map_column:
-    with st.container(
-        border=True,
-        height=CARD_HEIGHT,
-        key="card_map",
-    ):
-        card_title("Persebaran Provinsi berdasarkan Total SRP")
+# with map_column:
+#     with st.container(
+#         border=True,
+#         height=CARD_HEIGHT,
+#         key="card_map",
+#     ):
+#         card_title("Persebaran Provinsi berdasarkan Total SRP")
 
         
-        st.dataframe(
-            df,
-            hide_index=True,
-            use_container_width=True,
-        )
+#         st.dataframe(
+#             df,
+#             hide_index=True,
+#             use_container_width=True,
+#         )
 
 
-with ikk_column:
-    with st.container(
-        border=True,
-        height=CARD_HEIGHT,
-        key="card_kab",
-    ):
-        card_title("Persentase per IKK")
+# with ikk_column:
+#     with st.container(
+#         border=True,
+#         height=CARD_HEIGHT,
+#         key="card_kab",
+#     ):
+#         card_title("Persentase per IKK")
 
-        st.dataframe(
-            df_temuan_ikk,
-            hide_index=True,
-            use_container_width=True,
-        )
+#         st.dataframe(
+#             df_temuan_ikk,
+#             hide_index=True,
+#             use_container_width=True,
+#         )
+
+
+# with st.container(
+#     border=True,
+#     height=320,
+#     key="card_tbl",
+# ):
+#     card_title("Kegiatan dan Jumlah Temuan")
+
+#     st.dataframe(
+#         df_temuan,
+#         hide_index=True,
+#         use_container_width=True,
+#     )
+
+
+
+
+# =========================================================
+# MAPS
+# =========================================================
+
+# Data peta mengikuti filter tahun dan status,
+# tetapi menampilkan semua provinsi agar peta tetap utuh.
+mask_peta = pd.Series(True, index=df.index)
+
+if tahun_column is not None:
+    mask_peta &= df["_tahun"].eq(selected_year)
+
+if selected_status:
+    mask_peta &= df["status_sumber"].isin(selected_status)
+
+df_map = df.loc[mask_peta].copy()
+
+# Peta diletakkan di bawah seluruh card KPI.
+with st.container(
+    border=True,
+    key="card_map",
+):
+    render_srp_map(
+        df_map,
+        selected_province=selected_province,
+        df_all=df,
+    )
+
+# Tabel tetap ada, sekarang berada di bawah peta.
+CARD_HEIGHT = 520
+
+map_column, ikk_column = st.columns(2)
+
 
 
 with st.container(
@@ -559,3 +632,123 @@ with st.container(
         hide_index=True,
         use_container_width=True,
     )
+#===================================================    
+# INI GRAFIK SEMENTARA
+#===================================================
+with st.container(
+        border=True,
+        height=CARD_HEIGHT,
+        key="card_ikk",
+    ):
+        card_title("Persentase per IKK")
+
+        df_ikk = load_data_temuan_per_ikk().copy()
+
+        # Hitung jumlah kemunculan setiap kode temuan per IKK
+        df_ikk_count = (
+            df_ikk.groupby(["Kode IKK", "Kode Temuan"])
+            .size()
+            .reset_index(name="Jumlah")
+        )
+
+        # Hitung persentase dalam masing-masing IKK
+        df_ikk_count["Persentase"] = (
+            df_ikk_count["Jumlah"]
+            / df_ikk_count.groupby("Kode IKK")["Jumlah"].transform("sum")
+            * 100
+        )
+
+        palette_ikk = [
+            "#ee757e",
+            "#d95a67",
+            "#6c5b7f",
+            "#4fa88a",
+            "#9a91a3",
+            "#f6d3d6",
+            "#d9ebcb",
+        ]
+
+        fig_ikk = px.bar(
+            df_ikk_count,
+            x="Jumlah",
+            y="Kode IKK",
+            color="Kode Temuan",
+            orientation="h",
+            barmode="stack",
+            custom_data=["Persentase", "Jumlah"],
+            color_discrete_sequence=palette_ikk,
+            labels={
+                "Jumlah": "Persentase (%)",
+                "Kode IKK": "",
+                "Kode Temuan": "Kode Temuan",
+            },
+        )
+
+        fig_ikk.update_layout(
+            barmode="stack",
+            barnorm="percent",
+            xaxis=dict(
+                title="Persentase (%)",
+                range=[0, 100],
+                ticksuffix="%",
+                gridcolor="#efe8e6",
+            ),
+            yaxis=dict(
+                title="",
+                autorange="reversed",
+            ),
+            plot_bgcolor="#fff",
+            paper_bgcolor="#fff",
+            font=dict(
+                family="Arial",
+                color="#2b2433",
+                size=10,
+            ),
+            legend=dict(
+                title="Kode Temuan",
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.15,
+                font=dict(size=10, color="#2b2433"),
+                title_font=dict(size=11, color="#2b2433"),
+                itemsizing="constant",
+            ),
+            margin=dict(l=20, r=20, t=20, b=120),
+            height=500,
+            autosize=True
+        )
+        fig_ikk.update_xaxes(
+            tickfont=dict(size=11),
+            title_font=dict(size=12),
+        )
+
+        fig_ikk.update_yaxes(
+            tickfont=dict(size=11),
+            automargin=True,
+        )
+        fig_ikk.update_traces(
+            hoverlabel=dict(
+            bgcolor="#2b2433",
+            bordercolor="#6c5b7f",
+            font=dict(
+                color="#ffffff",
+                size=12,
+                family="Arial",
+            ),
+        ),
+            hovertemplate=(
+                "IKK: %{y}<br>"
+                "Kode Temuan: %{fullData.name}<br>"
+                "Persentase: %{customdata[0]:.2f}%<br>"
+                "Jumlah kemunculan: %{customdata[1]}"
+                "<extra></extra>"
+            )
+        )
+
+        st.plotly_chart(
+            fig_ikk,
+            use_container_width=True,
+            config={"displayModeBar": False},
+        )

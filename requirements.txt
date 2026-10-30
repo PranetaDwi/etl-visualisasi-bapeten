@@ -11,3 +11,5 @@ folium
 streamlit_folium
 google_auth_oauthlib
 jupyterlab
+branca
+shapely
