@@ -45,7 +45,8 @@ from etl.update_data_srp import refresh_data_srp
 from data_services.load_data_temuan import (
     load_data_temuan_function, 
     load_data_temuan_per_ikk_function,
-    load_data_temuan_terbuka_tertutup_function
+    load_data_temuan_terbuka_tertutup_function,
+    load_data_temuan_filter
 )
 
 from data_services.load_data_srp import (
@@ -62,8 +63,6 @@ from data_services.load_data_jadwal import(
 # =========================================================
 # 2. KONSTANTA
 # =========================================================
-
-ID_FILE_EXCEL = "1jZt22z352D151rMTqZITiPbenX45VIC7iTWe79VyjsA"
 
 TAHUN_DEFAULT = [
 
@@ -92,16 +91,6 @@ WIB = timezone(timedelta(hours=7))
 @st.cache_data(ttl=3600, show_spinner="Memuat data SRP...")
 def load_data_srp():
     return load_data_srp_function()
-
-
-@st.cache_data(ttl=3600, show_spinner="Memuat rekapitulasi...")
-def load_data_rekapitulasi():
-    drive, _ = connect_google()
-    return read_sheet(
-        ID_FILE_EXCEL,
-        drive,
-        sheet_name="Sheet1",
-    )
 
 
 @st.cache_data(ttl=3600, show_spinner="Memuat data temuan...")
@@ -203,7 +192,6 @@ def kpi_card(index, label, value):
 # =========================================================
 
 df = load_data_srp()
-df_sheet = load_data_rekapitulasi()
 df_temuan = load_data_temuan_terbuka_tertutup()
 df_temuan_ikk = load_data_temuan_per_ikk()
 
@@ -375,32 +363,17 @@ kpi_items = [
 
     (
         "Jumlah Temuan Kategori I",
-        load_data_rekapitulasi_kategori(
-            selected_province,
-            df_sheet,
-            "Provinsi",
-            "Jumlah Temuan Kategori I",
-        ),
+        load_data_temuan_filter(selected_province, "1"),
     ),
 
     (
         "Jumlah Temuan Kategori II",
-        load_data_rekapitulasi_kategori(
-            selected_province,
-            df_sheet,
-            "Provinsi",
-            "Jumlah Temuan Kategori II",
-        ),
+        load_data_temuan_filter(selected_province, "2"),
     ),
 
     (
         "Jumlah Temuan Kategori III",
-        load_data_rekapitulasi_kategori(
-            selected_province,
-            df_sheet,
-            "Provinsi",
-            "Jumlah Temuan Kategori III",
-        ),
+        load_data_temuan_filter(selected_province, "3"),
     ),
 ]
 
@@ -437,7 +410,7 @@ with map_column:
 with ikk_column:
     with st.container(
         border=True,
-        height=CARD_HEIGHT,
+        height=CARD_HEIGHT, 
         key="card_kab",
     ):
         card_title("Persentase per IKK")

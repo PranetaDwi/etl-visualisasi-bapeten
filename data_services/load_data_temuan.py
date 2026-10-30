@@ -94,3 +94,13 @@ def load_data_temuan_per_ikk_function():
     df["Kode IKK"] = df["kode"].map(mapping_ikk).fillna(df["kode"])
 
     return df
+
+def load_data_temuan_filter(filter_provinsi, nama_kategori):
+    df = load_data_temuan_function()
+
+    mask = df["Kategori Temuan"].astype(str).eq(str(nama_kategori))
+
+    if filter_provinsi != "Semua":
+        mask &= df["Provinsi"].eq(filter_provinsi)
+
+    return int(mask.sum())
