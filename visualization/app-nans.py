@@ -29,6 +29,7 @@ st.set_page_config(
     layout="wide",
 )
 
+
 if CSS_FILE.exists():
     st.markdown(
         f"<style>{CSS_FILE.read_text(encoding='utf-8')}</style>",
