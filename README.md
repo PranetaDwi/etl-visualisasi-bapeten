@@ -1,3 +1,3 @@
 github <br>
-username:inspeksifrzr <br>
+username: inspeksifrzr <br>
 password: inspeksi2026
