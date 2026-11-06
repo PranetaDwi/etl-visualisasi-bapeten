@@ -10,10 +10,66 @@ import streamlit as st
 from branca.colormap import linear
 from shapely.geometry import Point
 from streamlit_folium import st_folium
+import sys
+from pathlib import Path
 
 URL_PROVINSI = "https://raw.githubusercontent.com/Firdatulayuni/maps/main/provinsi.geojson"
 URL_KAB_KOTA = "https://raw.githubusercontent.com/Firdatulayuni/maps/main/kab_kota.geojson"
 
+# LOAD DATA TEMUAN
+FILE_PARQUET_ID = "1dqm3AKv8S85Eamp_59W7ooeGsXlPVFxU"
+ID_FILE_EXCEL = "1jZt22z352D151rMTqZITiPbenX45VIC7iTWe79VyjsA"
+ID_FILE_TEMUAN = "1vqxcE_9L_T4VZ3z7g-BC8fp7StIMVSX_"
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from services.google_services_own_account import (
+    connect_google,
+    read_parquet_drive,
+    read_sheet,
+    read_excel,
+)
+
+@st.cache_data(ttl=3600)
+def load_data_temuan():
+    drive, _ = connect_google()
+    excel_data = read_excel(ID_FILE_TEMUAN, drive)
+
+    return pd.read_excel(
+        excel_data,
+        sheet_name="clean_data",
+        engine="openpyxl",
+    )
+
+df_temuan = load_data_temuan()
+df_temuan_maps =df_temuan.copy()
+
+st.write("### DEBUG DATA FASILITAS")
+st.write("Jumlah baris:", len(df_temuan_maps))
+st.write("Nama kolom:", df_temuan_maps.columns.tolist())
+
+st.write(
+    df_temuan_maps[
+        [
+            "Nama Instansi /Fasilitas",
+            "Provinsi_Visualisasi",
+            "Lokasi Pemanfaatan",
+        ]
+    ].head(10)
+)
+
+CSV_KOORDINAT = Path(__file__).resolve().parent.parent / "koordinat_fasilitas.csv"
+
+df_koordinat = pd.read_csv(CSV_KOORDINAT)
+st.write("### DEBUG DATA KOORDINAT")
+st.write("Lokasi CSV:", str(CSV_KOORDINAT))
+st.write("Jumlah baris:", len(df_koordinat))
+st.write("Kolom:", df_koordinat.columns.tolist())
+st.dataframe(df_koordinat.head(10))
 
 @st.cache_data(show_spinner="Memuat batas wilayah...")
 def load_geojson(url):
@@ -21,7 +77,7 @@ def load_geojson(url):
         geojson = json.load(response)
     return gpd.GeoDataFrame.from_features(geojson["features"], crs="EPSG:4326")
 
-
+# MAPS NI
 def normalisasi_nama(nama):
     nama = str(nama).strip().lower()
     nama = unicodedata.normalize("NFKD", nama)
@@ -57,11 +113,10 @@ def _buat_peta_dasar(location=(-2.5, 118), zoom=4):
     )
 
 
-def render_srp_map(df_map, selected_province="Semua", df_all=None):
+def render_srp_map(df_map, selected_province="Semua", df_all=None, df_fasilitas=None):
     st.subheader("Persebaran SRP per Provinsi")
     st.caption(
         "Pilih provinsi dari filter dashboard atau klik provinsi pada peta. "
-        "Saat satu provinsi dipilih, peta menampilkan batas kabupaten/kotanya."
     )
 
     required = ["propinsi", "jenis_sumber"]
@@ -207,7 +262,6 @@ def render_srp_map(df_map, selected_province="Semua", df_all=None):
 
     nama_geojson = prov.iloc[0]["name"]
     kode_provinsi = normalisasi_kode(prov.iloc[0]["code"])
-    st.markdown(f"**Batas Kabupaten/Kota — {nama_geojson}**")
 
     try:
         gdf_kab = load_geojson(URL_KAB_KOTA).copy()
@@ -245,6 +299,89 @@ def render_srp_map(df_map, selected_province="Semua", df_all=None):
                 sticky=True,
             ),
         ).add_to(peta)
+
+        # Marker fasilitas: koordinat dibaca dari file lokal agar alamat internal
+        # tidak otomatis dikirim ke layanan geocoding publik.
+        if df_fasilitas is not None:
+            kolom_fasilitas = [
+                "Nama Instansi /Fasilitas",
+                "Provinsi_Visualisasi",
+                "Lokasi Pemanfaatan",
+            ]
+            kolom_hilang = [kolom for kolom in kolom_fasilitas if kolom not in df_fasilitas.columns]
+            if kolom_hilang:
+                st.warning(f"Kolom data fasilitas tidak ditemukan: {kolom_hilang}")
+            else:
+                data_fasilitas = df_fasilitas[kolom_fasilitas].copy()
+                data_fasilitas = data_fasilitas.dropna(
+                    subset=["Nama Instansi /Fasilitas", "Provinsi_Visualisasi"]
+                )
+                data_fasilitas["key_provinsi"] = data_fasilitas["Provinsi_Visualisasi"].apply(normalisasi_nama)
+                data_fasilitas = data_fasilitas[
+                    data_fasilitas["key_provinsi"] == normalisasi_nama(nama_geojson)
+                ].drop_duplicates(
+                    subset=["Nama Instansi /Fasilitas", "Lokasi Pemanfaatan"]
+                )
+
+                try:
+                    koordinat = pd.read_csv("koordinat_fasilitas.csv")
+                    kolom_koordinat = [
+                        "Nama Instansi /Fasilitas",
+                        "Lokasi Pemanfaatan",
+                        "latitude",
+                        "longitude",
+                    ]
+                    if not set(kolom_koordinat).issubset(koordinat.columns):
+                        st.warning(
+                            "File koordinat_fasilitas.csv harus memiliki kolom: "
+                            + ", ".join(kolom_koordinat)
+                        )
+                    else:
+                        data_fasilitas = data_fasilitas.merge(
+                            koordinat[kolom_koordinat].drop_duplicates(
+                                subset=["Nama Instansi /Fasilitas", "Lokasi Pemanfaatan"]
+                            ),
+                            on=["Nama Instansi /Fasilitas", "Lokasi Pemanfaatan"],
+                            how="left",
+                        )
+                        data_fasilitas["latitude"] = pd.to_numeric(
+                            data_fasilitas["latitude"], errors="coerce"
+                        )
+                        data_fasilitas["longitude"] = pd.to_numeric(
+                            data_fasilitas["longitude"], errors="coerce"
+                        )
+                        data_fasilitas = data_fasilitas.dropna(
+                            subset=["latitude", "longitude"]
+                        )
+                        data_fasilitas = data_fasilitas[
+                            data_fasilitas["latitude"].between(-11.5, 6.5)
+                            & data_fasilitas["longitude"].between(94, 142)
+                        ]
+
+                        for _, fasilitas in data_fasilitas.iterrows():
+                            nama_fasilitas = str(fasilitas["Nama Instansi /Fasilitas"])
+                            alamat = str(fasilitas["Lokasi Pemanfaatan"])
+                            folium.Marker(
+                                location=[fasilitas["latitude"], fasilitas["longitude"]],
+                                tooltip=nama_fasilitas,
+                                popup=folium.Popup(
+                                    f"<b>{nama_fasilitas}</b><br>{alamat}",
+                                    max_width=350,
+                                ),
+                                icon=folium.Icon(color="blue", icon="building", prefix="fa"),
+                            ).add_to(peta)
+
+                        st.caption(
+                            f"Menampilkan {len(data_fasilitas)} fasilitas dengan koordinat valid "
+                            f"di {nama_geojson}."
+                        )
+                except FileNotFoundError:
+                    st.info(
+                        "Marker fasilitas belum ditampilkan. Siapkan file lokal "
+                        "'koordinat_fasilitas.csv' berisi nama fasilitas, alamat, "
+                        "latitude, dan longitude."
+                    )
+
         st_folium(
             peta,
             use_container_width=True,
