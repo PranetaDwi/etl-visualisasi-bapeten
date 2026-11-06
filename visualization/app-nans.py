@@ -36,18 +36,12 @@ if CSS_FILE.exists():
         unsafe_allow_html=True,
     )
 
-from services.google_services_own_account import (
-    connect_google,
-    read_sheet,
-)
-
 from etl.update_data_srp import refresh_data_srp
 
 from data_services.load_data_temuan import (
     load_data_temuan_function, 
     load_data_temuan_per_ikk_function,
     load_data_temuan_terbuka_tertutup_function,
-    load_data_temuan_filter
 )
 
 from data_services.load_data_srp import (
@@ -346,6 +340,29 @@ def srp_zra_prp(file_olah, tipe):
 df_srp_load_filter = load_with_filter(selected_province, selected_status)
 
 
+df_temuan_raw = load_data_temuan()
+
+def hitung_kpi_temuan(df, provinsi):
+    if provinsi != "Semua":
+        df = df[df["Provinsi"].eq(provinsi)]
+
+    hasil = (
+        df["Kategori Temuan"]
+        .astype(str)
+        .value_counts()
+    )
+
+    return {
+        "1": int(hasil.get("1", 0)),
+        "2": int(hasil.get("2", 0)),
+        "3": int(hasil.get("3", 0)),
+    }
+
+
+kpi_temuan = hitung_kpi_temuan(
+    df_temuan_raw,
+    selected_province,
+)
 
 # =========================================================
 # 13. KARTU KPI
@@ -364,17 +381,17 @@ kpi_items = [
 
     (
         "Jumlah Temuan Kategori I",
-        load_data_temuan_filter(selected_province, "1"),
+        kpi_temuan["1"],
     ),
 
     (
         "Jumlah Temuan Kategori II",
-        load_data_temuan_filter(selected_province, "2"),
+        kpi_temuan["2"],
     ),
 
     (
         "Jumlah Temuan Kategori III",
-        load_data_temuan_filter(selected_province, "3"),
+        kpi_temuan["3"],
     ),
 ]
 

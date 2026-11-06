@@ -1,16 +1,6 @@
-import sys
-from pathlib import Path
+
 import pandas as pd
-
-import sys
-from pathlib import Path
-import pandas as pd
-
-ROOT_DIR = Path(__file__).resolve().parent
-
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
+import streamlit as st
 
 from services.google_services_own_account import (
     connect_google,
@@ -20,6 +10,7 @@ from services.google_services_own_account import (
 FILE_ID_EXCEL = "1w5oauNrRO1WA9-t7nUWs6lHNLmbaaTUc"
 
 
+@st.cache_data(ttl=3600, show_spinner="Memuat data jadwal...")
 def load_data_jadwal_function():
     drive, _ = connect_google()
 
@@ -31,9 +22,15 @@ def load_data_jadwal_function():
         engine="openpyxl",
     )
 
-    df = df[df["Sifat"] != "Verifikasi Perizinan"]
+    df = df.loc[
+        df["Sifat"].ne("Verifikasi Perizinan")
+    ].copy()
 
-    df["Tahun"] = df["Tanggal Pelaksanaan"].astype(str).str[:4]
+    df["Tahun"] = (
+        df["Tanggal Pelaksanaan"]
+        .astype(str)
+        .str[:4]
+    )
 
     return df
 
@@ -47,7 +44,6 @@ def load_data_jadwal_with_filter(filter_provinsi, filter_tahun):
         mask &= df["Propinsi"].eq(filter_provinsi)
 
     if filter_tahun != "Semua":
-        mask &= df["Tahun"].astype(str).eq(str(filter_tahun))
+        mask &= df["Tahun"].eq(str(filter_tahun))
 
     return int(mask.sum())
-
