@@ -1,6 +1,8 @@
 import json
 import re
 import unicodedata
+from urllib.request import Request
+from urllib.parse import urlencode
 from urllib.request import urlopen
 
 import folium
@@ -13,6 +15,7 @@ from streamlit_folium import st_folium
 import sys
 from pathlib import Path
 
+
 URL_PROVINSI = "https://raw.githubusercontent.com/Firdatulayuni/maps/main/provinsi.geojson"
 URL_KAB_KOTA = "https://raw.githubusercontent.com/Firdatulayuni/maps/main/kab_kota.geojson"
 
@@ -23,6 +26,7 @@ ID_FILE_TEMUAN = "1vqxcE_9L_T4VZ3z7g-BC8fp7StIMVSX_"
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+CSV_KOORDINAT = Path(__file__).resolve().parent.parent / "koordinat_fasilitas.csv"
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -51,7 +55,9 @@ def load_geojson(url):
         geojson = json.load(response)
     return gpd.GeoDataFrame.from_features(geojson["features"], crs="EPSG:4326")
 
-# MAPS NI
+#==============================================
+# MAPS
+#==============================================
 def normalisasi_nama(nama):
     nama = str(nama).strip().lower()
     nama = unicodedata.normalize("NFKD", nama)
@@ -274,87 +280,192 @@ def render_srp_map(df_map, selected_province="Semua", df_all=None, df_fasilitas=
             ),
         ).add_to(peta)
 
-        # Marker fasilitas: koordinat dibaca dari file lokal agar alamat internal
-        # tidak otomatis dikirim ke layanan geocoding publik.
+        # Marker fasilitas dan pencarian koordinat dari alamat.
         if df_fasilitas is not None:
             kolom_fasilitas = [
                 "Nama Instansi /Fasilitas",
                 "Provinsi_Visualisasi",
                 "Lokasi Pemanfaatan",
             ]
-            kolom_hilang = [kolom for kolom in kolom_fasilitas if kolom not in df_fasilitas.columns]
+            kolom_hilang = [
+                kolom for kolom in kolom_fasilitas
+                if kolom not in df_fasilitas.columns
+            ]
+
             if kolom_hilang:
-                st.warning(f"Kolom data fasilitas tidak ditemukan: {kolom_hilang}")
+                st.warning(
+                    f"Kolom data fasilitas tidak ditemukan: {kolom_hilang}"
+                )
             else:
                 data_fasilitas = df_fasilitas[kolom_fasilitas].copy()
                 data_fasilitas = data_fasilitas.dropna(
                     subset=["Nama Instansi /Fasilitas", "Provinsi_Visualisasi"]
                 )
-                data_fasilitas["key_provinsi"] = data_fasilitas["Provinsi_Visualisasi"].apply(normalisasi_nama)
+                data_fasilitas["key_provinsi"] = (
+                    data_fasilitas["Provinsi_Visualisasi"].apply(normalisasi_nama)
+                )
                 data_fasilitas = data_fasilitas[
                     data_fasilitas["key_provinsi"] == normalisasi_nama(nama_geojson)
                 ].drop_duplicates(
                     subset=["Nama Instansi /Fasilitas", "Lokasi Pemanfaatan"]
                 )
 
-                try:
-                    koordinat = pd.read_csv("koordinat_fasilitas.csv")
-                    kolom_koordinat = [
-                        "Nama Instansi /Fasilitas",
-                        "Lokasi Pemanfaatan",
-                        "latitude",
-                        "longitude",
-                    ]
-                    if not set(kolom_koordinat).issubset(koordinat.columns):
-                        st.warning(
-                            "File koordinat_fasilitas.csv harus memiliki kolom: "
-                            + ", ".join(kolom_koordinat)
-                        )
-                    else:
-                        data_fasilitas = data_fasilitas.merge(
-                            koordinat[kolom_koordinat].drop_duplicates(
-                                subset=["Nama Instansi /Fasilitas", "Lokasi Pemanfaatan"]
-                            ),
-                            on=["Nama Instansi /Fasilitas", "Lokasi Pemanfaatan"],
-                            how="left",
-                        )
-                        data_fasilitas["latitude"] = pd.to_numeric(
-                            data_fasilitas["latitude"], errors="coerce"
-                        )
-                        data_fasilitas["longitude"] = pd.to_numeric(
-                            data_fasilitas["longitude"], errors="coerce"
-                        )
-                        data_fasilitas = data_fasilitas.dropna(
-                            subset=["latitude", "longitude"]
-                        )
-                        data_fasilitas = data_fasilitas[
-                            data_fasilitas["latitude"].between(-11.5, 6.5)
-                            & data_fasilitas["longitude"].between(94, 142)
-                        ]
+                kolom_koordinat = [
+                    "Nama Instansi /Fasilitas",
+                    "Lokasi Pemanfaatan",
+                    "latitude",
+                    "longitude",
+                ]
 
-                        for _, fasilitas in data_fasilitas.iterrows():
-                            nama_fasilitas = str(fasilitas["Nama Instansi /Fasilitas"])
-                            alamat = str(fasilitas["Lokasi Pemanfaatan"])
-                            folium.Marker(
-                                location=[fasilitas["latitude"], fasilitas["longitude"]],
-                                tooltip=nama_fasilitas,
-                                popup=folium.Popup(
-                                    f"<b>{nama_fasilitas}</b><br>{alamat}",
-                                    max_width=350,
-                                ),
-                                icon=folium.Icon(color="blue", icon="building", prefix="fa"),
-                            ).add_to(peta)
+                # Jika CSV belum tersedia, siapkan tabel koordinat kosong.
+                if CSV_KOORDINAT.exists():
+                    koordinat = pd.read_csv(CSV_KOORDINAT)
+                else:
+                    koordinat = pd.DataFrame(columns=kolom_koordinat)
 
-                        st.caption(
-                            f"Menampilkan {len(data_fasilitas)} fasilitas dengan koordinat valid "
-                            f"di {nama_geojson}."
-                        )
-                except FileNotFoundError:
-                    st.info(
-                        "Marker fasilitas belum ditampilkan. Siapkan file lokal "
-                        "'koordinat_fasilitas.csv' berisi nama fasilitas, alamat, "
-                        "latitude, dan longitude."
+                if not set(kolom_koordinat).issubset(koordinat.columns):
+                    st.warning(
+                        "File koordinat_fasilitas.csv harus memiliki kolom: "
+                        + ", ".join(kolom_koordinat)
                     )
+                    data_fasilitas["latitude"] = pd.NA
+                    data_fasilitas["longitude"] = pd.NA
+                else:
+                    data_fasilitas = data_fasilitas.merge(
+                        koordinat[kolom_koordinat].drop_duplicates(
+                            subset=[
+                                "Nama Instansi /Fasilitas",
+                                "Lokasi Pemanfaatan",
+                            ]
+                        ),
+                        on=[
+                            "Nama Instansi /Fasilitas",
+                            "Lokasi Pemanfaatan",
+                        ],
+                        how="left",
+                    )
+
+                # Pastikan koordinat berupa angka.
+                data_fasilitas["latitude"] = pd.to_numeric(
+                    data_fasilitas["latitude"], errors="coerce"
+                )
+                data_fasilitas["longitude"] = pd.to_numeric(
+                    data_fasilitas["longitude"], errors="coerce"
+                )
+
+                # Koordinat hasil geocoding disimpan sementara di session.
+                if "koordinat_sesi" not in st.session_state:
+                    st.session_state["koordinat_sesi"] = {}
+
+                for idx, fasilitas in data_fasilitas.iterrows():
+                    key = (
+                        str(fasilitas["Nama Instansi /Fasilitas"])
+                        + "|||"
+                        + str(fasilitas["Lokasi Pemanfaatan"])
+                    )
+                    if key in st.session_state["koordinat_sesi"]:
+                        lat, lon = st.session_state["koordinat_sesi"][key]
+                        data_fasilitas.loc[idx, "latitude"] = lat
+                        data_fasilitas.loc[idx, "longitude"] = lon
+
+                # Cari koordinat satu fasilitas yang dipilih pengguna.
+                fasilitas_belum_ada = data_fasilitas[
+                    data_fasilitas[["latitude", "longitude"]].isna().any(axis=1)
+                    & data_fasilitas["Lokasi Pemanfaatan"].notna()
+                    & data_fasilitas["Lokasi Pemanfaatan"].astype(str).str.strip().ne("")
+                ]
+
+                if not fasilitas_belum_ada.empty:
+                    pilihan = fasilitas_belum_ada.index.tolist()
+
+                    index_pilihan = st.selectbox(
+                        "Pilih fasilitas yang akan dicari koordinatnya:",
+                        options=pilihan,
+                        format_func=lambda idx: str(
+                            data_fasilitas.loc[idx, "Nama Instansi /Fasilitas"]
+                        ),
+                        key=f"pilih_fasilitas_geocoding_{kode_provinsi}",
+                    )
+
+                    alamat_pilihan = data_fasilitas.loc[
+                        index_pilihan, "Lokasi Pemanfaatan"
+                    ]
+
+                    izin_geocoding = st.checkbox(
+                        "Saya mengizinkan alamat fasilitas terpilih dikirim "
+                        "ke layanan geocoding eksternal.",
+                        key=f"izin_geocoding_{kode_provinsi}",
+                    )
+
+                    if st.button(
+                        "Cari Koordinat",
+                        key=f"btn_cari_koordinat_{kode_provinsi}",
+                    ):
+                        if izin_geocoding:
+                            with st.spinner("Sedang mencari koordinat..."):
+                                lat, lon = cari_koordinat(str(alamat_pilihan))
+
+                            if lat is not None and lon is not None:
+                                nama = str(
+                                    data_fasilitas.loc[
+                                        index_pilihan, "Nama Instansi /Fasilitas"
+                                    ]
+                                )
+                                key = nama + "|||" + str(alamat_pilihan)
+                                st.session_state["koordinat_sesi"][key] = (lat, lon)
+                                st.success(
+                                    f"Koordinat ditemukan: {lat}, {lon}. "
+                                    "Peta akan diperbarui."
+                                )
+                                st.rerun()
+                            else:
+                                st.warning("Koordinat tidak ditemukan.")
+                        else:
+                            st.warning("Centang persetujuan terlebih dahulu.")
+
+                if st.button(
+                    "Hapus Cache Geocoding",
+                    key=f"btn_hapus_cache_{kode_provinsi}",
+                ):
+                    cari_koordinat.clear()
+                    st.session_state["koordinat_sesi"] = {}
+                    st.success("Cache dan koordinat sementara telah dibersihkan.")
+                    st.rerun()
+
+                # Tampilkan hanya fasilitas yang sudah memiliki koordinat valid.
+                data_fasilitas = data_fasilitas.dropna(
+                    subset=["latitude", "longitude"]
+                )
+                data_fasilitas = data_fasilitas[
+                    data_fasilitas["latitude"].between(-11.5, 6.5)
+                    & data_fasilitas["longitude"].between(94, 142)
+                ]
+
+                for _, fasilitas in data_fasilitas.iterrows():
+                    nama_fasilitas = str(fasilitas["Nama Instansi /Fasilitas"])
+                    alamat = str(fasilitas["Lokasi Pemanfaatan"])
+
+                    folium.Marker(
+                        location=[
+                            fasilitas["latitude"],
+                            fasilitas["longitude"],
+                        ],
+                        tooltip=nama_fasilitas,
+                        popup=folium.Popup(
+                            f"<b>{nama_fasilitas}</b><br>{alamat}",
+                            max_width=350,
+                        ),
+                        icon=folium.Icon(
+                            color="blue",
+                            icon="building",
+                            prefix="fa",
+                        ),
+                    ).add_to(peta)
+
+                st.caption(
+                    f"Menampilkan {len(data_fasilitas)} fasilitas dengan "
+                    f"koordinat valid di {nama_geojson}."
+                )
 
         st_folium(
             peta,
