@@ -423,7 +423,6 @@ map_column, ikk_column = st.columns(2)
 
 with st.container(
     border=True,
-    height=320,
     key="card_deadline",
 ):
     card_title("Deadline Inspeksi")
@@ -469,6 +468,7 @@ with st.container(
     kolom_tampil = [
         "Nama Instansi /Fasilitas",
         "Alamat",
+        "Kode Temuan",
         "Tgl Tindak Lanjut",
         "Tgl Batas Tindak Lanjut",
         "Sisa Hari",
@@ -512,11 +512,55 @@ with st.container(
 
         return [warna] * len(row)
 
-    st.dataframe(
+    event_deadline = st.dataframe(
         df_tampil.style.apply(warna_deadline, axis=1),
         hide_index=True,
         use_container_width=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="tabel_deadline",
     )
+    # Ambil fasilitas yang diklik
+    selected_rows = event_deadline.selection.rows
+
+    if selected_rows:
+        row = df_tampil.iloc[selected_rows[0]]
+
+        batas_tindak_lanjut = pd.to_datetime(
+            row["Tgl Batas Tindak Lanjut"],
+            errors="coerce",
+            dayfirst=True,
+        )
+
+        with st.container(border=True):
+            card_title("Countdown Deadline")
+
+            st.subheader(row["Nama Instansi /Fasilitas"])
+
+            if pd.isna(batas_tindak_lanjut):
+                st.warning("Tanggal batas tindak lanjut belum tersedia.")
+            else:
+                hari_ini = pd.Timestamp.now().normalize()
+
+                sisa_hari = max(
+                    (batas_tindak_lanjut.normalize() - hari_ini).days,
+                    0,
+                )
+
+                if sisa_hari == 0:
+                    st.success("0 hari — Selesai")
+                else:
+                    st.metric(
+                        label="Sisa Waktu",
+                        value=f"{sisa_hari} hari",
+                    )
+
+            st.caption(
+                f"Alamat: {row['Alamat']}"
+            )
+            st.caption(
+                f"Batas tindak lanjut: {row['Tgl Batas Tindak Lanjut']}"
+            )
 
 # with map_column:
 #     with st.container(
