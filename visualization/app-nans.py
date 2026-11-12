@@ -7,7 +7,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
-from components.maps import render_srp_map
 import plotly.express as px
 
 
@@ -20,6 +19,8 @@ ROOT_DIR = APP_DIR.parent
 
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+
+from visualization.components.maps import render_srp_map
 
 LOGO = APP_DIR / "assets" / "logo_bapeten.png"
 CSS_FILE = APP_DIR / "assets" / "style.css"
@@ -540,6 +541,18 @@ html(f'<div class="kpi-row">{kpi_html}</div>')
 CARD_HEIGHT = 520
 
 map_column, ikk_column = st.columns(2)
+
+with st.container(
+    border=True,
+    height=320,
+    key="card_deadline",
+):
+    card_title("Deadline Inspeksi")
+
+    st.dataframe(
+        hide_index=True,
+        use_container_width=True,
+    )
 
 # with map_column:
 #     with st.container(
