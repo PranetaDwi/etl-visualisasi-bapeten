@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 import re
+import numpy as np
 
 from services.google_services_own_account import (
     connect_google,
@@ -159,3 +160,18 @@ def load_data_temuan_filter(filter_provinsi, nama_kategori):
         mask &= df["Provinsi"].eq(filter_provinsi)
 
     return int(mask.sum())
+
+def kelompok_kegiatan_filter(file_olah, kelompok_kegiatan):
+
+    if isinstance(kelompok_kegiatan, (list, tuple, np.ndarray)):
+        if len(kelompok_kegiatan) > 0:
+            file_olah = file_olah[
+                file_olah["Jenis Kegiatan"].isin(kelompok_kegiatan)
+            ]
+
+    elif kelompok_kegiatan != "Semua":
+        file_olah = file_olah[
+            file_olah["Jenis Kegiatan"] == kelompok_kegiatan
+        ]
+
+    return file_olah

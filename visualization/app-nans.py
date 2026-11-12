@@ -44,6 +44,7 @@ from data_services.load_data_temuan import (
     load_data_temuan_function, 
     load_data_temuan_per_ikk_function,
     load_data_temuan_terbuka_tertutup_function,
+    kelompok_kegiatan_filter
 )
 
 from data_services.load_data_srp import (
@@ -263,11 +264,6 @@ with st.sidebar:
             status_options,
             key="filter_status",
         )
-        selected_kelompok = st.multiselect(
-            "Jenis Kegiatan",
-            kelompok_options,
-            key="filter_jenis_kelompok",
-        )
 
     sidebar_label("file", "Data")
 
@@ -481,7 +477,19 @@ with st.container(
 #         use_container_width=True,
 #     )
 
+st.markdown("""
+    <style>
+        iframe[title="streamlit_folium.st_folium"] {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
 
+        div[data-testid="stCustomComponentV1"] {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 
 # Peta diletakkan di bawah seluruh card KPI.
@@ -512,8 +520,14 @@ with st.container(
 ):
     card_title("Kegiatan dan Jumlah Temuan")
 
+    selected_kelompok = st.multiselect(
+        "Jenis Kegiatan",
+        kelompok_options,
+        key="filter_jenis_kelompok",
+    )
+
     st.dataframe(
-        df_temuan_filt,
+        kelompok_kegiatan_filter(df_temuan_filt, selected_kelompok),
         hide_index=True,
         use_container_width=True,
     )
