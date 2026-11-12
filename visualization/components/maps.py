@@ -49,39 +49,6 @@ def load_data_temuan():
         engine="openpyxl",
     )
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def cari_koordinat(alamat):
-    if not alamat or pd.isna(alamat):
-        return None, None
-
-    params = urlencode({
-        "q": f"{alamat}, Indonesia",
-        "format": "json",
-        "limit": 1,
-    })
-
-    url = f"https://nominatim.openstreetmap.org/search?{params}"
-
-    request = Request(
-        url,
-        headers={
-            "User-Agent": "BAPETEN-Internal-Dashboard/1.0"
-        },
-    )
-
-    try:
-        with urlopen(request, timeout=20) as response:
-            hasil = json.loads(response.read().decode("utf-8"))
-
-        if hasil:
-            return float(hasil[0]["lat"]), float(hasil[0]["lon"])
-
-        return None, None
-
-    except Exception as e:
-        st.warning(f"Gagal mencari koordinat: {e}")
-        return None, None
-    
 @st.cache_data(show_spinner="Memuat batas wilayah...")
 def load_geojson(url):
     with urlopen(url, timeout=60) as response:

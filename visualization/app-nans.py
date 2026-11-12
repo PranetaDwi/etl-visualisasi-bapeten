@@ -31,31 +31,40 @@ st.set_page_config(
     layout="wide",
 )
 
+
 if CSS_FILE.exists():
     st.markdown(
         f"<style>{CSS_FILE.read_text(encoding='utf-8')}</style>",
         unsafe_allow_html=True,
     )
 
-from services.google_services_own_account import (
-    connect_google,
-    read_parquet_drive,
-    read_sheet,
-    read_excel,
+from etl.update_data_srp import refresh_data_srp
+
+from data_services.load_data_temuan import (
+    load_data_temuan_function, 
+    load_data_temuan_per_ikk_function,
+    load_data_temuan_terbuka_tertutup_function,
 )
 
-from etl.update_data_srp import refresh_data_srp
+from data_services.load_data_srp import (
+    load_data_srp_function,
+    load_with_filter,
+    load_kpi
+)
+
+from data_services.load_data_jadwal import(
+    load_data_jadwal_with_filter
+)
 
 
 # =========================================================
 # 2. KONSTANTA
 # =========================================================
 
-FILE_PARQUET_ID = "1dqm3AKv8S85Eamp_59W7ooeGsXlPVFxU"
-ID_FILE_EXCEL = "1jZt22z352D151rMTqZITiPbenX45VIC7iTWe79VyjsA"
-ID_FILE_TEMUAN = "1vqxcE_9L_T4VZ3z7g-BC8fp7StIMVSX_"
+TAHUN_DEFAULT = [
 
-TAHUN_DEFAULT = 2026
+]
+
 TAHUN_COLUMN_NAMES = ("tahun", "year", "thn", "tahun_inspeksi")
 
 HARI = [
@@ -78,31 +87,12 @@ WIB = timezone(timedelta(hours=7))
 
 @st.cache_data(ttl=3600, show_spinner="Memuat data SRP...")
 def load_data_srp():
-    drive, _ = connect_google()
-    return read_parquet_drive(FILE_PARQUET_ID, drive)
-
-
-@st.cache_data(ttl=3600, show_spinner="Memuat rekapitulasi...")
-def load_data_rekapitulasi():
-    drive, _ = connect_google()
-    return read_sheet(
-        ID_FILE_EXCEL,
-        drive,
-        sheet_name="Sheet1",
-    )
+    return load_data_srp_function()
 
 
 @st.cache_data(ttl=3600, show_spinner="Memuat data temuan...")
 def load_data_temuan():
-    drive, _ = connect_google()
-    excel_data = read_excel(ID_FILE_TEMUAN, drive)
-
-    return pd.read_excel(
-        excel_data,
-        sheet_name="clean_data",
-        engine="openpyxl",
-    )
-
+    return load_data_temuan_function()
 
 # =========================================================
 # 4. PENGOLAHAN DATA TEMUAN DENGAN CACHE
@@ -110,59 +100,11 @@ def load_data_temuan():
 
 @st.cache_data(ttl=3600)
 def load_data_temuan_terbuka_tertutup():
-    df = load_data_temuan()
-
-    df_status = (
-        df.groupby(
-            [
-                "Kelompok Kegiatan",
-                "Kode Temuan",
-                "Status Bundling/ Temuan",
-            ],
-            sort=False,
-        )
-        .size()
-        .unstack(fill_value=0)
-        .reset_index()
-        .rename(
-            columns={
-                "Kelompok Kegiatan": "Jenis Kegiatan",
-                "Kode Temuan": "Kode",
-                "Terbuka": "terbuka",
-                "Tertutup": "tertutup",
-            }
-        )
-    )
-
-    for col in ["terbuka", "tertutup"]:
-        if col not in df_status.columns:
-            df_status[col] = 0
-
-    df_status["Total Temuan"] = (
-        df_status["terbuka"] + df_status["tertutup"]
-    )
-
-    return df_status
-
+    return load_data_temuan_terbuka_tertutup_function()
 
 @st.cache_data(ttl=3600)
 def load_data_temuan_per_ikk():
-    df = load_data_temuan().copy()
-
-    mapping_ikk = {
-        "01": "01 - Kode Perizinan",
-        "02": "02 - Ketersediaan SDM",
-        "03": "03 - Pemantauan Dosis Radiasi",
-        "04": "04 - Pemantauan Kesehatan Pekerja Radiasi",
-        "05": "05 - Ketersediaan Peralatan Keselamatan dan Keamanan SRP",
-        "06": "06 - Pemantauan Paparan Radiasi Daerah Kerja",
-        "07": "07 - Ketersediaan dan Kesesuaian Dokumen dan Rekaman Keselamatan dan Keamanan SRP",
-    }
-
-    df["kode"] = df["Kode Temuan"].astype("string").str[2:4]
-    df["Kode IKK"] = df["kode"].map(mapping_ikk).fillna(df["kode"])
-
-    return df
+    return load_data_temuan_per_ikk_function()
 
 
 # =========================================================
@@ -247,7 +189,6 @@ def kpi_card(index, label, value):
 # =========================================================
 
 df = load_data_srp()
-df_sheet = load_data_rekapitulasi()
 df_temuan = load_data_temuan_terbuka_tertutup()
 df_temuan_ikk = load_data_temuan_per_ikk()
 
@@ -256,39 +197,7 @@ df_temuan_ikk = load_data_temuan_per_ikk()
 # =========================================================
 # 7. PERSIAPAN KOLOM FILTER
 # =========================================================
-
-# Salinan agar perubahan kolom lokal tidak mengubah data cache.
-df = df.copy()
-
-tahun_column = next(
-    (
-        col for col in df.columns
-        if str(col).strip().lower() in TAHUN_COLUMN_NAMES
-    ),
-    None,
-)
-
-if tahun_column is not None:
-    df["_tahun"] = pd.to_numeric(
-        df[tahun_column],
-        errors="coerce",
-    )
-
-    year_options = sorted(
-        df["_tahun"].dropna().astype(int).unique().tolist(),
-        reverse=True,
-    )
-
-    if not year_options:
-        year_options = [TAHUN_DEFAULT]
-else:
-    year_options = [TAHUN_DEFAULT]
-
-year_index = (
-    year_options.index(TAHUN_DEFAULT)
-    if TAHUN_DEFAULT in year_options
-    else 0
-)
+year_options = ["Semua"] + list(range(2017, 2027))
 
 province_options = sorted(
     df["propinsi"].dropna().unique().tolist()
@@ -346,7 +255,6 @@ with st.sidebar:
         selected_year = st.selectbox(
             "Tahun",
             year_options,
-            index=year_index,
             key="filter_tahun",
         )
 
@@ -369,30 +277,6 @@ with st.sidebar:
         f'<div class="sm">{len(df):,} baris data</div>'
         '</div></div>'
     )
-
-
-# =========================================================
-# 9. FILTER DATA
-# =========================================================
-
-# Mask tunggal menghindari rangkaian salinan DataFrame.
-mask = pd.Series(True, index=df.index)
-
-if tahun_column is not None:
-    mask &= df["_tahun"].eq(selected_year)
-
-if selected_status:
-    mask &= df["status_sumber"].isin(selected_status)
-
-if selected_province != "Semua":
-    mask &= df["propinsi"].eq(selected_province)
-
-if selected_kelompok:
-    df_temuan_filt = df_temuan_filt[
-        df_temuan_filt["Jenis Kegiatan"].isin(selected_kelompok)
-    ].copy()
-
-filtered = df.loc[mask]
 
 
 # =========================================================
@@ -438,13 +322,6 @@ with st.container(
         clock()
 
 
-# =========================================================
-# 11. CEK HASIL FILTER
-# =========================================================
-
-if filtered.empty:
-    st.info("Tidak ada data yang cocok dengan filter.")
-    st.stop()
 
 
 # =========================================================
@@ -473,6 +350,32 @@ def srp_zra_prp(file_olah, tipe):
         file_olah["jenis_sumber"].eq(tipe).sum()
     )
 
+df_srp_load_filter = load_with_filter(selected_province, selected_status)
+
+
+df_temuan_raw = load_data_temuan()
+
+def hitung_kpi_temuan(df, provinsi):
+    if provinsi != "Semua":
+        df = df[df["Provinsi"].eq(provinsi)]
+
+    hasil = (
+        df["Kategori Temuan"]
+        .astype(str)
+        .value_counts()
+    )
+
+    return {
+        "1": int(hasil.get("1", 0)),
+        "2": int(hasil.get("2", 0)),
+        "3": int(hasil.get("3", 0)),
+    }
+
+
+kpi_temuan = hitung_kpi_temuan(
+    df_temuan_raw,
+    selected_province,
+)
 
 # =========================================================
 # 13. KARTU KPI
@@ -482,46 +385,26 @@ kpi_items = [
     ("Provinsi", selected_province),
 
     (
-        "Jumlah Inspeksi per 4 Tahun",
-        load_data_rekapitulasi_kategori(
-            selected_province,
-            df_sheet,
-            "Provinsi",
-            "Jumlah Inspeksi per 4 tahun",
-        ),
+        "Jumlah Inspeksi",
+        load_data_jadwal_with_filter(selected_province, selected_year)
     ),
 
-    ("Jumlah PRP", srp_zra_prp(filtered, "PRP")),
-    ("Jumlah ZRA", srp_zra_prp(filtered, "ZRA")),
+    ("Jumlah PRP", load_kpi(df_srp_load_filter, "PRP")),
+    ("Jumlah ZRA", load_kpi(df_srp_load_filter, "ZRA")),
 
     (
         "Jumlah Temuan Kategori I",
-        load_data_rekapitulasi_kategori(
-            selected_province,
-            df_sheet,
-            "Provinsi",
-            "Jumlah Temuan Kategori I",
-        ),
+        kpi_temuan["1"],
     ),
 
     (
         "Jumlah Temuan Kategori II",
-        load_data_rekapitulasi_kategori(
-            selected_province,
-            df_sheet,
-            "Provinsi",
-            "Jumlah Temuan Kategori II",
-        ),
+        kpi_temuan["2"],
     ),
 
     (
         "Jumlah Temuan Kategori III",
-        load_data_rekapitulasi_kategori(
-            selected_province,
-            df_sheet,
-            "Provinsi",
-            "Jumlah Temuan Kategori III",
-        ),
+        kpi_temuan["3"],
     ),
 ]
 
@@ -601,19 +484,6 @@ with st.container(
 
 
 
-# =========================================================
-# MAPS (BELUM SELESAI BANGET)
-# =========================================================
-mask_peta = pd.Series(True, index=df.index)
-
-if tahun_column is not None:
-    mask_peta &= df["_tahun"].eq(selected_year)
-
-if selected_status:
-    mask_peta &= df["status_sumber"].isin(selected_status)
-
-df_map = df.loc[mask_peta].copy()
-
 # Peta diletakkan di bawah seluruh card KPI.
 with st.container(
     border=True,
@@ -623,7 +493,7 @@ with st.container(
     df_temuan_maps = load_data_temuan().copy()
 
     render_srp_map(
-        df_map=df_map,
+        df_map=df_srp_load_filter,
         selected_province=selected_province,
         df_all=df,
         df_fasilitas=df_temuan_maps,
@@ -633,7 +503,6 @@ with st.container(
 CARD_HEIGHT = 520
 
 map_column, ikk_column = st.columns(2)
-
 
 
 with st.container(
