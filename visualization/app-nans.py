@@ -428,7 +428,92 @@ with st.container(
 ):
     card_title("Deadline Inspeksi")
 
+    df_fasilitas = load_data_temuan().copy()
+
+    fasilitas_options = sorted(
+        df_fasilitas["Nama Instansi /Fasilitas"].dropna().unique().tolist()
+    )
+
+    selected_fasilitas = st.selectbox(
+        "Fasilitas",
+        ["Semua"] + fasilitas_options,
+        key="filter_fasilitas",
+    )
+
+    if selected_fasilitas != "Semua":
+        df_fasilitas = df_fasilitas[
+            df_fasilitas["Nama Instansi /Fasilitas"] == selected_fasilitas
+        ].copy()
+
+    # Konversi kolom tanggal
+    df_fasilitas["Tgl Tindak Lanjut"] = pd.to_datetime(
+        df_fasilitas["Tgl Tindak Lanjut"],
+        errors="coerce",
+        dayfirst=True,
+    )
+
+    df_fasilitas["Tgl Batas Tindak Lanjut"] = pd.to_datetime(
+        df_fasilitas["Tgl Batas Tindak Lanjut"],
+        errors="coerce",
+        dayfirst=True,
+    )
+
+    # Hitung sisa hari dari tanggal saat dashboard dibuka
+    hari_ini = pd.Timestamp.now().normalize()
+
+    df_fasilitas["Sisa Hari"] = (
+        df_fasilitas["Tgl Batas Tindak Lanjut"] - hari_ini
+    ).dt.days.clip(lower=0).astype("Int64")
+
+    # Pilih kolom yang ditampilkan
+    kolom_tampil = [
+        "Nama Instansi /Fasilitas",
+        "Alamat",
+        "Tgl Tindak Lanjut",
+        "Tgl Batas Tindak Lanjut",
+        "Sisa Hari",
+    ]
+
+    df_tampil = df_fasilitas[kolom_tampil].copy()
+
+    # Format tanggal
+    kolom_tanggal = [
+        "Tgl Tindak Lanjut",
+        "Tgl Batas Tindak Lanjut",
+    ]
+
+    for kolom in kolom_tanggal:
+        df_tampil[kolom] = df_tampil[kolom].dt.strftime("%d-%m-%Y")
+
+    # Urutkan dari sisa hari paling sedikit
+    df_tampil = df_tampil.sort_values(
+        by="Sisa Hari",
+        ascending=True,
+        na_position="last",
+    )
+
+    # Pewarnaan berdasarkan sisa hari
+    def warna_deadline(row):
+        hari = row["Sisa Hari"]
+
+        if pd.isna(hari):
+            return [""] * len(row)
+
+        if hari == 0:
+            warna = "background-color: #b7e4c7; color: #14532d;"
+        elif hari <= 7:
+            warna = "background-color: #ff7777; color: #660000;"
+        elif hari <= 30:
+            warna = "background-color: #ffbd73; color: #663300;"
+        elif hari <= 60:
+            warna = "background-color: #fff09a; color: #665500;"
+        else:
+            warna = "background-color: #ffffff; color: #000000;"
+
+        return [warna] * len(row)
+
     st.dataframe(
+        df_tampil.style.apply(warna_deadline, axis=1),
         hide_index=True,
         use_container_width=True,
     )
