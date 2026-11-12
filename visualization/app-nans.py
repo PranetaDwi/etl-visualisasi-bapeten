@@ -198,7 +198,7 @@ df_temuan_ikk = load_data_temuan_per_ikk()
 # =========================================================
 # 7. PERSIAPAN KOLOM FILTER
 # =========================================================
-year_options = ["Semua"] + list(range(2017, 2027))
+year_options = list(range(2017, 2027))
 
 province_options = sorted(
     df["propinsi"].dropna().unique().tolist()
@@ -253,7 +253,7 @@ with st.sidebar:
             key="filter_provinsi",
         )
 
-        selected_year = st.selectbox(
+        selected_year = st.multiselect(
             "Tahun",
             year_options,
             key="filter_tahun",

@@ -26,11 +26,10 @@ def load_data_jadwal_function():
         df["Sifat"].ne("Verifikasi Perizinan")
     ].copy()
 
-    df["Tahun"] = (
-        df["Tanggal Pelaksanaan"]
-        .astype(str)
-        .str[:4]
-    )
+    df["Tahun"] = pd.to_numeric(
+        df["Tanggal Pelaksanaan"].astype(str).str[:4],
+        errors="coerce"
+    ).astype("Int64")
 
     return df
 
@@ -43,7 +42,7 @@ def load_data_jadwal_with_filter(filter_provinsi, filter_tahun):
     if filter_provinsi != "Semua":
         mask &= df["Propinsi"].eq(filter_provinsi)
 
-    if filter_tahun != "Semua":
-        mask &= df["Tahun"].eq(str(filter_tahun))
+    if filter_tahun:
+        mask &= df["Tahun"].isin(filter_tahun)
 
     return int(mask.sum())
