@@ -45,32 +45,6 @@ def load_data_temuan():
         engine="openpyxl",
     )
 
-df_temuan = load_data_temuan()
-df_temuan_maps =df_temuan.copy()
-
-st.write("### DEBUG DATA FASILITAS")
-st.write("Jumlah baris:", len(df_temuan_maps))
-st.write("Nama kolom:", df_temuan_maps.columns.tolist())
-
-st.write(
-    df_temuan_maps[
-        [
-            "Nama Instansi /Fasilitas",
-            "Provinsi_Visualisasi",
-            "Lokasi Pemanfaatan",
-        ]
-    ].head(10)
-)
-
-CSV_KOORDINAT = Path(__file__).resolve().parent.parent / "koordinat_fasilitas.csv"
-
-df_koordinat = pd.read_csv(CSV_KOORDINAT)
-st.write("### DEBUG DATA KOORDINAT")
-st.write("Lokasi CSV:", str(CSV_KOORDINAT))
-st.write("Jumlah baris:", len(df_koordinat))
-st.write("Kolom:", df_koordinat.columns.tolist())
-st.dataframe(df_koordinat.head(10))
-
 @st.cache_data(show_spinner="Memuat batas wilayah...")
 def load_geojson(url):
     with urlopen(url, timeout=60) as response:
