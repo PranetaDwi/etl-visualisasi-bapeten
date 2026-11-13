@@ -8,8 +8,8 @@ from services.google_services_own_account import (
     read_excel,
 )
 
-ID_FILE_TEMUAN = "1vqxcE_9L_T4VZ3z7g-BC8fp7StIMVSX_"
-
+# ID_FILE_TEMUAN = "1vqxcE_9L_T4VZ3z7g-BC8fp7StIMVSX_"
+ID_FILE_TEMUAN = "1O5bES7Zdcd9ARdGiBFSgfm1vCIXu1SvY"
 
 provinsi_indonesia = [
     "Aceh", "Sumatera Utara", "Sumatera Barat", "Riau",
@@ -78,7 +78,7 @@ def load_data_temuan_function():
 
     df = pd.read_excel(
         excel_data,
-        sheet_name="clean_data",
+        sheet_name="Temuan_2023-2026",
         engine="openpyxl",
     )
 
